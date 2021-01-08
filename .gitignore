@@ -1,3 +1,4 @@
+.bazel_docker_id
 .DS_Store
 .ipynb_checkpoints
 node_modules
