@@ -1,0 +1,61 @@
+
+syntax = "proto2";
+
+// option cc_api_version = 2;
+
+package snake;
+
+enum Pixel {
+  EMPTY = 0;
+  P1 = 1;
+  P2 = 2;
+  APPLE = 3;
+}
+
+enum Direction {
+  UP = 0;
+  DOWN = 1;
+  LEFT = 2;
+  RIGHT = 3;
+}
+
+enum GameState {
+  RUNNING = 0;
+  P1_WIN = 1;
+  P2_WIN = 2;
+  DRAW = 3;
+}
+
+message Coord {
+  optional int32 x = 1;
+  optional int32 y = 2;
+}
+
+message SnakeState {
+  repeated Coord coords = 1;
+}
+
+message SnakeBoardState {
+  optional SnakeState p1 = 1;
+  optional SnakeState p2 = 2;
+  repeated Coord apple_position = 3;
+}
+
+
+// The greeting service definitio n.
+service Greeter {
+  // Sends a greeting
+  rpc SayHello (HelloRequest) returns (HelloReply) {}
+  // Sends another greeting
+  rpc SayHelloAgain (HelloRequest) returns (HelloReply) {}
+}
+
+// The request message containing the user's name.
+message HelloRequest {
+  optional string name = 1;
+}
+
+// The response message containing the greetings
+message HelloReply {
+  optional string message = 1;
+}
