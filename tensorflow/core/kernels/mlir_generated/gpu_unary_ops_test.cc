@@ -132,7 +132,7 @@ class GpuUnaryOpTest : public OpsTestBase {
                                 baseline_callback, config)                   \
   GENERATE_DEFAULT_TEST_WITH_SPECIFIC_INPUT_VALUES_2(                        \
       op_name, InT, BaselineT, OutT, BaselineOutT,                           \
-      test::DefaultInput<NativeT>(#op_name), baseline_callback, config)
+      test::DefaultInput<NativeT>(), baseline_callback, config)
 
 #define GENERATE_DEFAULT_TEST_WITH_SPECIFIC_INPUT_VALUES(        \
     op_name, InT, OutT, input_values, baseline_callback, config) \
@@ -246,36 +246,33 @@ GENERATE_DEFAULT_TEST(Imag, DT_COMPLEX128, DT_DOUBLE, baseline_imag,
                       test::GpuOpsTestConfig().AddTout().NoBufferReuse())
 
 /// Test `tf.IsInf`.
-
-// TODO(b/162575339): The tests currently still fails with CUDA_ILLEGAL_ADDRESS
-// when Test with unranked kernels.
-TEST_F(GpuUnaryOpTest, DISABLED_IsInfFloat) {
+TEST_F(GpuUnaryOpTest, IsInfFloat) {
   Test<float, float, bool, bool>(
       /*op_name=*/"IsInf", test::DefaultInputShape(),
-      test::DefaultInput<float>("IsInf"),
+      test::DefaultInput<float>(),
       /*baseline_callback=*/std::isinf,
-      test::GpuOpsTestConfig().ExpectStrictlyEqual());
+      test::GpuOpsTestConfig().ExpectStrictlyEqual().NoBufferReuse());
 }
 
-TEST_F(GpuUnaryOpTest, DISABLED_IsInfDouble) {
+TEST_F(GpuUnaryOpTest, IsInfDouble) {
   // Workaround for gcc bug, it would fail with "unresolved overloaded function
   // type" if passing std::isinf with type double. So we use type float for
   // comparing expected values.
   Test<double, float, bool, bool>(
       /*op_name=*/"IsInf", test::DefaultInputShape(),
-      test::DefaultInput<double>("IsInf"),
+      test::DefaultInput<double>(),
       /*baseline_callback=*/std::isinf,
-      test::GpuOpsTestConfig().ExpectStrictlyEqual());
+      test::GpuOpsTestConfig().ExpectStrictlyEqual().NoBufferReuse());
 }
 
-TEST_F(GpuUnaryOpTest, DISABLED_IsInfHalf) {
+TEST_F(GpuUnaryOpTest, IsInfHalf) {
   Test<Eigen::half, float, bool, bool>(
       /*op_name=*/"IsInf", test::DefaultInputShape(),
-      test::DefaultInput<Eigen::half>("IsInf"),
+      test::DefaultInput<Eigen::half>(),
       /*baseline_callback=*/std::isinf,
-      test::GpuOpsTestConfig().ExpectStrictlyEqual());
+      test::GpuOpsTestConfig().ExpectStrictlyEqual().NoBufferReuse());
 }
-
+//
 /// Test `tf.Log`.
 
 GENERATE_DEFAULT_TEST_WITH_SPECIFIC_INPUT_VALUES(

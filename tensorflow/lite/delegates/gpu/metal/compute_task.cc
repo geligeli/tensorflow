@@ -48,17 +48,6 @@ absl::Status ComputeTask::CompileWithDevice(id<MTLDevice> device,
                          std::to_string(bind_index) + ")]],\n";
     bind_index++;
   }
-  for (const auto& buffer : desc.task->immutable_buffers) {
-    args_declarations += buffer.declaration + "[[buffer(" +
-                         std::to_string(bind_index) + ")]],\n";
-    bind_index++;
-  }
-
-  for (const auto& buffer : desc.task->uniform_buffers) {
-    args_declarations += buffer.declaration + "[[buffer(" +
-                         std::to_string(bind_index) + ")]],\n";
-    bind_index++;
-  }
   desc.task->shader_source = absl::Substitute(desc.task->shader_source, "$0",
                                               args_declarations + "$1", "");
 
@@ -122,21 +111,8 @@ absl::Status ComputeTask::CompileWithDevice(id<MTLDevice> device,
   for (auto& id : desc.src_tensors_ids) {
     input_buffers_.emplace_back(InputBuffer{id, nil});
   }
-  for (auto& uniform : desc.task->uniform_buffers) {
-    uniform_buffers_.emplace_back(UniformBuffer{{}, uniform.data_function});
-  }
   output_buffers_.emplace_back(OutputBuffer{desc.dst_tensors_ids[0], nil});
-  const bool f32_storage = precision == CalculationsPrecision::F32;
-  for (auto& immutable : desc.task->immutable_buffers) {
-    int padding = 4 * (f32_storage ? sizeof(float) : sizeof(HalfBits));
-    int paddedSize = AlignByN(immutable.data.size(), padding);
-    immutable.data.resize(paddedSize);
-    id<MTLBuffer> metalBuffer =
-        [device newBufferWithBytes:immutable.data.data()
-                            length:immutable.data.size()
-                           options:MTLResourceStorageModeShared];
-    immutable_buffers_.emplace_back(metalBuffer);
-  }
+  update_function_ = desc.task->update_function;
   resize_function_ = desc.task->resize_function;
   program_ = program;
   src_tensors_names_ = desc.task->src_tensors_names;
@@ -162,9 +138,7 @@ absl::Status ComputeTask::UpdateParamsWithDevice(
     }
     dst_shapes.push_back(it->second);
   }
-  for (auto& uniform : uniform_buffers_) {
-    uniform.data = uniform.data_function(src_shapes, dst_shapes);
-  }
+  RETURN_IF_ERROR(update_function_(src_shapes, dst_shapes, &metal_args_));
 
   // Dispatch parameters re-calculation
   auto workGroups = resize_function_(src_shapes, dst_shapes);
@@ -216,16 +190,6 @@ void ComputeTask::EncodeWithEncoder(id<MTLComputeCommandEncoder> encoder) {
   }
   for (const auto& buffer : input_buffers_) {
     [encoder setBuffer:buffer.metal_handle offset:0 atIndex:bindIndex];
-    bindIndex++;
-  }
-  for (auto& immutable : immutable_buffers_) {
-    [encoder setBuffer:immutable offset:0 atIndex:bindIndex];
-    bindIndex++;
-  }
-  for (auto& uniform : uniform_buffers_) {
-    [encoder setBytes:uniform.data.data()
-               length:uniform.data.size()
-              atIndex:bindIndex];
     bindIndex++;
   }
   metal_args_.Encode(encoder, bindIndex);
