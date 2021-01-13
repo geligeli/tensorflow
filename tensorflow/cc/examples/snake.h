@@ -61,6 +61,7 @@ struct Point {
 class Snake {
  public:
   explicit Snake(Point head) : points_({head}) {}
+  explicit Snake(std::vector<Point> points) : points_(points) {}
 
   Point move(Direction d) {
     Point result = points_.back();
@@ -98,10 +99,11 @@ class SnakeBoard {
                    Snake{Point{3 * ARENA_SIZE / 4, ARENA_SIZE / 2}}) {}
 
   SnakeBoard(Snake p1, Snake p2)
-      : p1_(p1),
-        p2_(p2),
-        pixels_{},
-        apple_spawner(std::bind(&SnakeBoard::random_free_position, this)) {
+      : SnakeBoard(p1, p2, std::mem_fn(&SnakeBoard::random_free_position)) {}
+
+  SnakeBoard(Snake p1, Snake p2,
+             std::function<Point(const SnakeBoard&)> apple_spawner)
+      : p1_(p1), p2_(p2), pixels_{}, apple_spawner_(apple_spawner) {
     for (auto p : p1_.points()) {
       pixels_[p.x + ARENA_SIZE * p.y] = Pixel::P1;
     }
@@ -112,9 +114,12 @@ class SnakeBoard {
   }
 
   struct PlayerView {
-    const Snake& player1;
-    const Snake& player2;
+    const Snake& player;
+    const Snake& opponent;
     const SnakeBoard& board;
+    bool valid_move(Direction d) const {
+      return board.is_unoccupied(player.peek(d));
+    }
   };
 
   PlayerView p1_view() const { return {p1_, p2_, *this}; }
@@ -146,15 +151,19 @@ class SnakeBoard {
 
     if (p1next == p2next || (!p1_alive && !p2_alive)) {
       if (p1_.size() == p2_.size()) {
-        return GameState::DRAW;
+        game_state_ = GameState::DRAW;
+        return game_state_;
       } else if (p1_.size() > p2_.size()) {
-        return GameState::P1_WIN;
+        game_state_ = GameState::P1_WIN;
+        return game_state_;
       }
-      return GameState::P2_WIN;
+      game_state_ = GameState::P2_WIN;
+      return game_state_;
     }
 
     if (p1_alive != p2_alive) {
-      return p1_alive ? GameState::P1_WIN : GameState::P2_WIN;
+      game_state_ = p1_alive ? GameState::P1_WIN : GameState::P2_WIN;
+      return game_state_;
     }
 
     bool apple_consumed = false;
@@ -180,14 +189,15 @@ class SnakeBoard {
       spawn_apple();
     }
 
-    return GameState::RUNNING;
+    game_state_ = GameState::RUNNING;
+    return game_state_;
   }
 
   void print() const {
     // 🟣🟤🟢🟡🟠⚪⚫🔴🔵
     std::cout << "\x1B[2J\x1B[H";
-    for (int x = 0; x < ARENA_SIZE; ++x) {
-      for (int y = 0; y < ARENA_SIZE; ++y) {
+    for (int y = 0; y < ARENA_SIZE; ++y) {
+      for (int x = 0; x < ARENA_SIZE; ++x) {
         switch (pixels_[x + ARENA_SIZE * y]) {
           case EMPTY:
             std::cout << "⬜";
@@ -228,20 +238,25 @@ class SnakeBoard {
   }
 
   void spawn_apple() {
-    if (apple_spawner) {
-      apple_position_ = apple_spawner();
+    if (apple_spawner_) {
+      apple_position_ = apple_spawner_(*this);
       at(apple_position_) = Pixel::APPLE;
     }
   }
 
   Point apple_position() const { return apple_position_; }
 
+  bool is_terminal() const { return game_state_ != GameState::RUNNING; }
+
+  GameState game_state() const { return game_state_; }
+
  private:
+  GameState game_state_ = GameState::RUNNING;
   Snake p1_;
   Snake p2_;
   Point apple_position_;
   std::array<Pixel, ARENA_SIZE * ARENA_SIZE> pixels_;
-  std::function<Point()> apple_spawner;
+  std::function<Point(const SnakeBoard&)> apple_spawner_;
 };
 
 using SnakeBoard16 = SnakeBoard<16>;
@@ -252,9 +267,9 @@ GameState RunGame(StratFun a, StratFun b) {
   SnakeBoard16 board;
   GameState retval = board.move(a(board.p1_view()), b(board.p2_view()));
   while (retval == GameState::RUNNING) {
-    board.print();
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    // std::this_thread::sleep_for(std::chrono::milliseconds(200));
     retval = board.move(a(board.p1_view()), b(board.p2_view()));
+    // board.print();
   }
   return retval;
 }
@@ -262,13 +277,13 @@ GameState RunGame(StratFun a, StratFun b) {
 Direction GreedyStrategy(const SnakeBoard16::PlayerView& p) {
   struct DirectionScore {
     Direction dir;
-    int apple_dist;
     bool unoccupied;
+    int apple_dist;
   };
   std::array<DirectionScore, Direction_ARRAYSIZE> scores;
   for (int i = Direction_MIN; i < Direction_ARRAYSIZE; ++i) {
     const Direction d = static_cast<Direction>(i);
-    auto new_head = p.player1.head().peek(d);
+    auto new_head = p.player.head().peek(d);
     scores[i].unoccupied = p.board.is_unoccupied(new_head);
     scores[i].dir = d;
     scores[i].apple_dist = new_head.mdist(p.board.apple_position());

@@ -610,3 +610,11 @@ build:release_gpu_linux_cuda_10_1 --config=release_gpu_linux
 build:release_gpu_linux_cuda_10_1 --action_env CUDA_TOOLKIT_PATH="/usr/local/cuda-10.1"
 build:release_gpu_linux_cuda_10_1 --action_env=TF_CUDA_VERSION="10"
 build:release_gpu_linux_cuda_10_1 --action_env=TF_CUDNN_VERSION="7"
+
+build:asan --strip=never
+build:asan --copt -fsanitize=address
+build:asan --copt -DADDRESS_SANITIZER
+build:asan --copt -O1
+build:asan --copt -g
+build:asan --copt -fno-omit-frame-pointer
+build:asan --linkopt -fsanitize=address

@@ -1,6 +1,11 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
 load("@com_google_protobuf//:protobuf.bzl", "cc_proto_library")
-
+load("//tensorflow:tensorflow.bzl", "tf_cc_test")
+# "tf_copts",
+# "tf_cuda_library",
+# "tf_custom_op_library",
+# "tf_kernel_library",
+# )
 #tf_cc_binary(
 #    name = "example",
 #    srcs = ["example.cc"],
@@ -52,14 +57,17 @@ cc_test(
     ],
 )
 
-cc_test(
+tf_cc_test(
     name = "mcts_test",
     timeout = "short",
     testonly = 1,
     srcs = ["mcts_test.cc"],
     deps = [
         ":mcts",
-        "@com_google_googletest//:gtest_main",
+        "//tensorflow/core:lib",
+        "//tensorflow/core:test",
+        "//tensorflow/core:test_main",
+        "//tensorflow/core/platform:logging",
     ],
 )
 
