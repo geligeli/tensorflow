@@ -120,6 +120,14 @@ class SnakeBoard {
     bool valid_move(Direction d) const {
       return board.is_unoccupied(player.peek(d));
     }
+    bool has_move() const {
+      for (int i = Direction_MIN; i < Direction_ARRAYSIZE; ++i) {
+        if (board.is_unoccupied(player.peek(static_cast<Direction>(i)))) {
+          return true;
+        }
+      }
+      return false;
+    }
   };
 
   PlayerView p1_view() const { return {p1_, p2_, *this}; }

@@ -26,7 +26,11 @@ TEST(Mcts, MctsTest) {
   SnakeMctsAdapter adapter(state);
   Mcts mcts(random_rollout);
 
-  mcts.Search(adapter);
+  auto d = mcts.Search(adapter);
+  LOG(ERROR) << Direction_Name(d);
+
+  std::vector<float> a = {-1.0, -0.89};
+  LOG(ERROR) << *std::max_element(a.begin(), a.end());
 }
 
 }  // namespace snake
