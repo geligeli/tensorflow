@@ -55,7 +55,9 @@ struct Point {
     r.set_y(y);
     return r;
   }
-  static Point from_coord(const Coord& c) { return {c.x(), c.y()}; }
+  static Point from_coord(const Coord& c) {
+    return {static_cast<signed char>(c.x()), static_cast<signed char>(c.y())};
+  }
 };
 
 class Snake {
@@ -118,7 +120,7 @@ class SnakeBoard {
     const Snake& opponent;
     const SnakeBoard& board;
     bool valid_move(Direction d) const {
-      return board.is_unoccupied(player.peek(d));
+      return has_move() ? board.is_unoccupied(player.peek(d)) : true;
     }
     bool has_move() const {
       for (int i = Direction_MIN; i < Direction_ARRAYSIZE; ++i) {
@@ -204,6 +206,7 @@ class SnakeBoard {
   void print() const {
     // 🟣🟤🟢🟡🟠⚪⚫🔴🔵
     std::cout << "\x1B[2J\x1B[H";
+    // std::cout << "\n";
     for (int y = 0; y < ARENA_SIZE; ++y) {
       for (int x = 0; x < ARENA_SIZE; ++x) {
         switch (pixels_[x + ARENA_SIZE * y]) {
@@ -223,6 +226,24 @@ class SnakeBoard {
       }
       std::cout << std::endl;
     }
+
+    std::cout << "P1 🟦 time left to live: "
+              << 100 - p1_.moves_since_last_apple() << "\n";
+    std::cout << "P2 🟩 time left to live: "
+              << 100 - p2_.moves_since_last_apple() << "\n";
+    switch (game_state_) {
+      case GameState::P1_WIN:
+        std::cout << "P1 🟦 is the winner" << std::endl;
+        break;
+      case GameState::P2_WIN:
+        std::cout << "P2 🟩 is the winner" << std::endl;
+        break;
+      case GameState::DRAW:
+        std::cout << "It's a draw" << std::endl;
+        break;
+      default:
+        break;
+    }
     // using namespace std::chrono;
     // milliseconds ms =
     //     duration_cast<milliseconds>(system_clock::now().time_since_epoch());
@@ -232,9 +253,10 @@ class SnakeBoard {
   Point random_free_position() const {
     std::random_device rd;
     std::mt19937 gen(rd());
-    std::uniform_int_distribution<> distrib(0, ARENA_SIZE * ARENA_SIZE - 1);
-    int pos = distrib(gen);
-    const int initial_pos = pos;
+    std::uniform_int_distribution<size_t> distrib(0,
+                                                  ARENA_SIZE * ARENA_SIZE - 1);
+    size_t pos = distrib(gen);
+    const size_t initial_pos = pos;
     while (Pixel::EMPTY != pixels_[pos]) {
       ++pos;
       if (pos >= pixels_.size()) {
@@ -242,7 +264,8 @@ class SnakeBoard {
       }
       CHECK(pos != initial_pos);
     }
-    return {pos % ARENA_SIZE, pos / ARENA_SIZE};
+    return {static_cast<signed char>(pos % ARENA_SIZE),
+            static_cast<signed char>(pos / ARENA_SIZE)};
   }
 
   void spawn_apple() {

@@ -41,7 +41,10 @@ class SnakeMctsAdapter {
       case GameState::DRAW:
         return 0;
       default:
+        break;
     }
+    CHECK(false);
+    return 0;
   }
 
   std::bitset<Direction_ARRAYSIZE> valid_actions() const {
@@ -49,19 +52,22 @@ class SnakeMctsAdapter {
     for (int i = Direction_MIN; i < Direction_ARRAYSIZE; ++i) {
       result.set(i, valid_action(static_cast<Direction>(i)));
     }
+    CHECK(result.count() > 0);
     return result;
   }
 
   bool valid_action(Direction d) const {
-    if (p1_queued_move_) {
+    if (move_queued_) {
       return state_.p2_view().valid_move(d);
     }
     return state_.p1_view().valid_move(d);
   }
 
   bool is_terminal() const {
-    return state_.is_terminal() || (valid_actions().count() == 0);
+    return state_.is_terminal();  // || (valid_actions().count() == 0);
   }
+
+  int player() const { return move_queued_ ? 1 : -1; }
 
   void print() const {
     state_.print();
@@ -88,7 +94,9 @@ class Node {
         parent_(parent),
         action_(action),
         is_terminal_(state_.is_terminal()),
-        valid_actions_(state_.valid_actions()) {}
+        valid_actions_(state_.valid_actions()) {
+    CHECK(valid_actions_.count() > 0);
+  }
 
   const SnakeMctsAdapter state_;
   Node* const parent_;
@@ -100,7 +108,10 @@ class Node {
   int num_visits_ = 0;
   double total_reward_ = 0;
   double ucb(double exploration_value) const {
-    return total_reward_ / num_visits_ /* *current_player */ +
+    // if (parent_->parent_ == nullptr && exploration_value == 0.0)
+    //   LOG(ERROR) << Direction_Name(action_) << " " << total_reward_ << " "
+    //              << num_visits_ << " " << state_.player();
+    return (total_reward_ / num_visits_) * state_.player() +
            exploration_value *
                sqrt(2.0 * log(parent_->num_visits_) / num_visits_);
   }
@@ -110,6 +121,9 @@ class Node {
         continue;
       }
       auto clone_state = state_;
+      // if (parent_ == nullptr)
+      //   LOG(ERROR) << "expanding " << i << " "
+      //              << Direction_Name(static_cast<Direction>(i));
       clone_state.execute(static_cast<Direction>(i));
       children_[i] = new Node(clone_state, static_cast<Direction>(i), this);
       ++num_children_expanded;
@@ -120,7 +134,7 @@ class Node {
     return nullptr;
   }
   const std::bitset<Direction_ARRAYSIZE> valid_actions_;
-  int num_children_expanded = 0;
+  size_t num_children_expanded = 0;
   std::array<Node*, Direction_ARRAYSIZE> children_ = {};
   ~Node() {
     for (Node* n : children_) {
@@ -143,7 +157,6 @@ double random_rollout(const SnakeMctsAdapter& state) {
       s.execute(candidate_d);
     }
   }
-  LOG(ERROR) << s.value();
   return s.value();
 }
 
@@ -159,6 +172,7 @@ class Mcts {
     }
 
     auto* best_child = get_best_child(root_.get(), 0.0);
+    CHECK(best_child != nullptr);
     return best_child->action_;
   }
 

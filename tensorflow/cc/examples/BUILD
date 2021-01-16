@@ -1,6 +1,6 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
 load("@com_google_protobuf//:protobuf.bzl", "cc_proto_library")
-load("//tensorflow:tensorflow.bzl", "tf_cc_test")
+load("//tensorflow:tensorflow.bzl", "tf_cc_test", "tf_copts")
 # "tf_copts",
 # "tf_cuda_library",
 # "tf_custom_op_library",
@@ -26,6 +26,11 @@ cc_library(
     name = "snake",
     srcs = ["snake.cc"],
     hdrs = ["snake.h"],
+    copts = tf_copts() + [
+        "-Werror",
+        "-Wextra",
+        "-Wall",
+    ],
     deps = [
         ":snake_proto_cc",
         "//tensorflow/core/platform:logging",
@@ -38,6 +43,11 @@ cc_library(
     name = "mcts",
     srcs = ["mcts.cc"],
     hdrs = ["mcts.h"],
+    copts = tf_copts() + [
+        "-Werror",
+        "-Wextra",
+        "-Wall",
+    ],
     deps = [
         ":snake",
         "//tensorflow/core/platform:logging",
