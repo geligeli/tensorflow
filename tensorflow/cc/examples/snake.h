@@ -132,6 +132,22 @@ class SnakeBoard {
     }
   };
 
+  SnakeBoard(PlayerView pv)
+      : game_state_(pv.board.game_state_),
+        p1_(pv.player),
+        p2_(pv.opponent),
+        apple_position_(pv.board.apple_position_),
+        pixels_{},
+        apple_spawner_(std::mem_fn(&SnakeBoard::random_free_position)) {
+    for (auto p : p1_.points()) {
+      pixels_[p.x + ARENA_SIZE * p.y] = Pixel::P1;
+    }
+    for (auto p : p2_.points()) {
+      pixels_[p.x + ARENA_SIZE * p.y] = Pixel::P2;
+    }
+    at(apple_position_) = Pixel::APPLE;
+  }
+
   PlayerView p1_view() const { return {p1_, p2_, *this}; }
 
   PlayerView p2_view() const { return {p2_, p1_, *this}; }
@@ -300,7 +316,7 @@ GameState RunGame(StratFun a, StratFun b) {
   while (retval == GameState::RUNNING) {
     // std::this_thread::sleep_for(std::chrono::milliseconds(200));
     retval = board.move(a(board.p1_view()), b(board.p2_view()));
-    // board.print();
+    board.print();
   }
   return retval;
 }

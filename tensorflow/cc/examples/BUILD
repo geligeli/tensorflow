@@ -1,6 +1,6 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
 load("@com_google_protobuf//:protobuf.bzl", "cc_proto_library")
-load("//tensorflow:tensorflow.bzl", "tf_cc_test", "tf_copts")
+load("//tensorflow:tensorflow.bzl", "tf_cc_test", "tf_copts", "tf_gpu_cc_test")
 # "tf_copts",
 # "tf_cuda_library",
 # "tf_custom_op_library",
@@ -56,6 +56,42 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "mcts_prediction_batching",
+    hdrs = ["mcts_prediction_batching.h"],
+    copts = tf_copts() + [
+        "-Werror",
+        "-Wextra",
+        "-Wall",
+        "-fexceptions",
+    ],
+    deps = [
+        "@boost//:coroutine2",
+        "@boost//:fiber",
+    ],
+)
+
+cc_library(
+    name = "az_mcts",
+    hdrs = ["az_mcts.h"],
+    copts = tf_copts() + [
+        "-Werror",
+        "-Wextra",
+        "-Wall",
+    ],
+    deps = [
+        ":mcts_prediction_batching",
+        ":snake",
+        "//tensorflow/cc/saved_model:loader",
+        "//tensorflow/cc/saved_model:tag_constants",
+        "//tensorflow/core:lib",
+        "//tensorflow/core:tensorflow",
+        "//tensorflow/core/platform:logging",
+        "@com_google_absl//absl/flags:flag",
+        "@com_google_absl//absl/flags:parse",
+    ],
+)
+
 cc_test(
     name = "snake_test",
     timeout = "short",
@@ -69,15 +105,45 @@ cc_test(
 
 tf_cc_test(
     name = "mcts_test",
-    timeout = "short",
-    testonly = 1,
     srcs = ["mcts_test.cc"],
+    extra_copts = [
+        "-fexceptions",
+    ],
+    # linkstatic = 1,
     deps = [
         ":mcts",
+        # "//tensorflow/cc:client_session",
+        "//tensorflow/cc/saved_model:loader",
+        "//tensorflow/cc/saved_model:tag_constants",
         "//tensorflow/core:lib",
+        "//tensorflow/core:tensorflow",
         "//tensorflow/core:test",
         "//tensorflow/core:test_main",
         "//tensorflow/core/platform:logging",
+        "@boost//:coroutine2",
+        "@boost//:fiber",
+    ],
+)
+
+tf_cc_test(
+    name = "az_mcts_test",
+    srcs = ["az_mcts_test.cc"],
+    extra_copts = [
+        "-fexceptions",
+    ],
+    # linkstatic = 1,
+    deps = [
+        ":az_mcts",
+        # "//tensorflow/cc:client_session",
+        "//tensorflow/cc/saved_model:loader",
+        "//tensorflow/cc/saved_model:tag_constants",
+        "//tensorflow/core:lib",
+        "//tensorflow/core:tensorflow",
+        "//tensorflow/core:test",
+        "//tensorflow/core:test_main",
+        "//tensorflow/core/platform:logging",
+        "@boost//:coroutine2",
+        "@boost//:fiber",
     ],
 )
 
