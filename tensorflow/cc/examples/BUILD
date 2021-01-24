@@ -49,6 +49,7 @@ cc_library(
         "-Wall",
     ],
     deps = [
+        ":mcts_node",
         ":snake",
         "//tensorflow/core/platform:logging",
         "@com_google_absl//absl/flags:flag",
@@ -72,6 +73,40 @@ cc_library(
 )
 
 cc_library(
+    name = "network",
+    hdrs = ["network.h"],
+    copts = tf_copts() + [
+        "-Werror",
+        "-Wextra",
+        "-Wall",
+    ],
+    deps = [
+        ":snake",
+        "//tensorflow/cc/saved_model:loader",
+        "//tensorflow/cc/saved_model:tag_constants",
+        "//tensorflow/core:lib",
+        "//tensorflow/core:tensorflow",
+        "//tensorflow/core/platform:logging",
+        "@com_google_absl//absl/flags:flag",
+        "@com_google_absl//absl/flags:parse",
+    ],
+)
+
+cc_library(
+    name = "mcts_node",
+    hdrs = ["mcts_node.h"],
+    copts = tf_copts() + [
+        "-Werror",
+        "-Wextra",
+        "-Wall",
+    ],
+    deps = [
+        ":snake",
+        "//tensorflow/core/platform:logging",
+    ],
+)
+
+cc_library(
     name = "az_mcts",
     hdrs = ["az_mcts.h"],
     copts = tf_copts() + [
@@ -80,7 +115,9 @@ cc_library(
         "-Wall",
     ],
     deps = [
+        ":mcts_node",
         ":mcts_prediction_batching",
+        ":network",
         ":snake",
         "//tensorflow/cc/saved_model:loader",
         "//tensorflow/cc/saved_model:tag_constants",
@@ -112,7 +149,6 @@ tf_cc_test(
     # linkstatic = 1,
     deps = [
         ":mcts",
-        # "//tensorflow/cc:client_session",
         "//tensorflow/cc/saved_model:loader",
         "//tensorflow/cc/saved_model:tag_constants",
         "//tensorflow/core:lib",
@@ -131,10 +167,8 @@ tf_cc_test(
     extra_copts = [
         "-fexceptions",
     ],
-    # linkstatic = 1,
     deps = [
         ":az_mcts",
-        # "//tensorflow/cc:client_session",
         "//tensorflow/cc/saved_model:loader",
         "//tensorflow/cc/saved_model:tag_constants",
         "//tensorflow/core:lib",

@@ -14,6 +14,7 @@ LEFT -x ---------  +x  RIGHT
 */
 
 #include <array>
+#include <bitset>
 #include <random>
 #include <thread>
 #include <vector>
@@ -345,6 +346,75 @@ Direction GreedyStrategy(const SnakeBoard16::PlayerView& p) {
                           })
       ->dir;
 }
+
+class SnakeMctsAdapter {
+ public:
+  explicit SnakeMctsAdapter(SnakeBoard16 state) : state_(state) {}
+
+  void execute(Direction d) {
+    if (move_queued_) {
+      state_.move(p1_queued_move_, d);
+      move_queued_ = false;
+    } else {
+      move_queued_ = true;
+      p1_queued_move_ = d;
+    }
+  }
+
+  double value() const {
+    switch (state_.game_state()) {
+      case GameState::P1_WIN:
+        return 1;
+      case GameState::P2_WIN:
+        return -1;
+      case GameState::DRAW:
+        return 0;
+      default:
+        break;
+    }
+    CHECK(false);
+    return 0;
+  }
+
+  std::bitset<Direction_ARRAYSIZE> valid_actions() const {
+    std::bitset<Direction_ARRAYSIZE> result;
+    for (int i = Direction_MIN; i < Direction_ARRAYSIZE; ++i) {
+      result.set(i, valid_action(static_cast<Direction>(i)));
+    }
+    CHECK(result.count() > 0);
+    return result;
+  }
+
+  bool valid_action(Direction d) const {
+    if (move_queued_) {
+      return state_.p2_view().valid_move(d);
+    }
+    return state_.p1_view().valid_move(d);
+  }
+
+  bool is_terminal() const {
+    return state_.is_terminal();  // || (valid_actions().count() == 0);
+  }
+
+  int player() const { return move_queued_ ? 1 : -1; }
+
+  void print() const {
+    state_.print();
+    if (move_queued_) {
+      std::cout << "p1 queue move: " << Direction_Name(p1_queued_move_)
+                << std::endl;
+    } else {
+      std::cout << "no move queued for p1" << std::endl;
+    }
+  }
+
+  const SnakeBoard16& board() const { return state_; }
+
+ private:
+  SnakeBoard16 state_;
+  Direction p1_queued_move_;
+  bool move_queued_ = false;
+};
 
 }  // namespace snake
 

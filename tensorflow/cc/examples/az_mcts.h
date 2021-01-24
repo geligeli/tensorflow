@@ -13,6 +13,8 @@
 #include <thread>
 #include <vector>
 
+#include "tensorflow/cc/examples/mcts_node.h"
+#include "tensorflow/cc/examples/network.h"
 #include "tensorflow/cc/examples/snake.h"
 #include "tensorflow/cc/saved_model/loader.h"
 #include "tensorflow/cc/saved_model/tag_constants.h"
@@ -20,131 +22,7 @@
 
 namespace snake {
 
-class SnakeMctsAdapter {
- public:
-  explicit SnakeMctsAdapter(SnakeBoard16 state) : state_(state) {}
-
-  void execute(Direction d) {
-    if (move_queued_) {
-      state_.move(p1_queued_move_, d);
-      move_queued_ = false;
-    } else {
-      move_queued_ = true;
-      p1_queued_move_ = d;
-    }
-  }
-
-  double value() const {
-    switch (state_.game_state()) {
-      case GameState::P1_WIN:
-        return 1;
-      case GameState::P2_WIN:
-        return -1;
-      case GameState::DRAW:
-        return 0;
-      default:
-        break;
-    }
-    CHECK(false);
-    return 0;
-  }
-
-  std::bitset<Direction_ARRAYSIZE> valid_actions() const {
-    std::bitset<Direction_ARRAYSIZE> result;
-    for (int i = Direction_MIN; i < Direction_ARRAYSIZE; ++i) {
-      result.set(i, valid_action(static_cast<Direction>(i)));
-    }
-    CHECK(result.count() > 0);
-    return result;
-  }
-
-  bool valid_action(Direction d) const {
-    if (move_queued_) {
-      return state_.p2_view().valid_move(d);
-    }
-    return state_.p1_view().valid_move(d);
-  }
-
-  bool is_terminal() const {
-    return state_.is_terminal();  // || (valid_actions().count() == 0);
-  }
-
-  int player() const { return move_queued_ ? 1 : -1; }
-
-  void print() const {
-    state_.print();
-    if (move_queued_) {
-      std::cout << "p1 queue move: " << Direction_Name(p1_queued_move_)
-                << std::endl;
-    } else {
-      std::cout << "no move queued for p1" << std::endl;
-    }
-  }
-
- private:
-  SnakeBoard16 state_;
-  Direction p1_queued_move_;
-  bool move_queued_ = false;
-};
-
-class Node {
- public:
-  explicit Node(SnakeMctsAdapter state) : Node(state, Direction::UP, nullptr) {}
-
-  explicit Node(SnakeMctsAdapter state, Direction action, Node* parent)
-      : state_(state),
-        parent_(parent),
-        action_(action),
-        is_terminal_(state_.is_terminal()),
-        valid_actions_(state_.valid_actions()) {
-    CHECK(valid_actions_.count() > 0);
-  }
-
-  ~Node() {
-    for (Node* n : children_) {
-      if (n) {
-        delete n;
-      }
-    }
-  }
-
-  bool is_fully_expanded() const {
-    return num_children_expanded == valid_actions_.count();
-  }
-  double ucb(double exploration_value) const {
-    return (total_reward_ / num_visits_) * state_.player() +
-           exploration_value *
-               sqrt(2.0 * log(parent_->num_visits_) / num_visits_);
-  }
-  Node* expand() {
-    for (int i = Direction_MIN; i < Direction_ARRAYSIZE; ++i) {
-      if (!valid_actions_.test(i) || children_[i]) {
-        continue;
-      }
-      auto clone_state = state_;
-      clone_state.execute(static_cast<Direction>(i));
-      children_[i] = new Node(clone_state, static_cast<Direction>(i), this);
-      ++num_children_expanded;
-      return children_[i];
-    }
-    state_.print();
-    CHECK(false) << "should never happen " << num_children_expanded;
-    return nullptr;
-  }
-
-  const SnakeMctsAdapter state_;
-  Node* const parent_;
-  const Direction action_;
-  const bool is_terminal_;
-  const std::bitset<Direction_ARRAYSIZE> valid_actions_;
-
-  int num_visits_ = 0;
-  double total_reward_ = 0;
-  size_t num_children_expanded = 0;
-  std::array<Node*, Direction_ARRAYSIZE> children_ = {};
-  double prior_ = 0.0;
-};
-
+/*
 double random_rollout(const SnakeMctsAdapter& state) {
   auto s = state;
   std::random_device rd;
@@ -158,16 +36,14 @@ double random_rollout(const SnakeMctsAdapter& state) {
     }
   }
   return s.value();
-}
+}*/
 
 class Mcts {
  public:
   static Direction Strategy(const SnakeBoard16::PlayerView& p) {
-    Mcts mcts(random_rollout);
+    Mcts mcts;
     return mcts.Search(SnakeMctsAdapter(SnakeBoard16(p)));
   }
-  Mcts(std::function<double(const SnakeMctsAdapter&)> rollout)
-      : rollout_(rollout) {}
   Direction Search(SnakeMctsAdapter state) {
     root_ = std::make_unique<Node>(state);
 
@@ -241,50 +117,7 @@ class Mcts {
 
  private:
   float exploration_constant_ = 2.0;
-  std::function<double(const SnakeMctsAdapter&)> rollout_;
   std::unique_ptr<Node> root_;
-};
-
-class Network {
- public:
-  struct Prediction {
-    std::vector<double> policy;
-    double value;
-  };
-  void BatchPredict(std::vector<const SnakeMctsAdapter*> states,
-                    std::vector<Prediction>& predictions) const {
-    using namespace tensorflow;
-    Tensor input(DT_FLOAT,
-                 TensorShape{{static_cast<int>(states.size()), 16, 16, 3}});
-    for (int i = 0; i < input.NumElements(); ++i) {
-      input.flat<float>()(i) = 0;
-    }
-    std::vector<Tensor> output;
-    predictions.resize(states.size());
-    TF_CHECK_OK(model_bundle_.session->Run(
-        {{"serving_default_board:0", input}},
-        {"StatefulPartitionedCall:0", "StatefulPartitionedCall:1"}, {},
-        &output));
-    CHECK_EQ(output.size(), 2);
-    for (int i = 0; i < states.size(); ++i) {
-      for (int j = 0; j < 4; ++j) {
-        predictions[i].policy[j] = output[0].matrix<float>()(i, j);
-      }
-      predictions[i].value = output[1].scalar<float>()();
-    }
-  }
-  void Load(const std::string& dirname) {
-    tensorflow::SessionOptions session_options = tensorflow::SessionOptions();
-    // (*session_options.config.mutable_device_count())["GPU"] = 0;
-    session_options.config.set_log_device_placement(true);
-    tensorflow::RunOptions run_options = tensorflow::RunOptions();
-    TF_CHECK_OK(tensorflow::LoadSavedModel(
-        session_options, run_options, dirname,
-        {tensorflow::kSavedModelTagServe}, &model_bundle_));
-  }
-
- private:
-  tensorflow::SavedModelBundle model_bundle_;
 };
 
 /*
