@@ -19,6 +19,7 @@ LEFT -x ---------  +x  RIGHT
 #include <thread>
 #include <vector>
 
+#include "absl/strings/str_join.h"
 #include "tensorflow/cc/examples/snake.pb.h"
 #include "tensorflow/core/platform/default/logging.h"
 // #include "tensorflow/cc/examples/snake.grpc.pb.h"
@@ -89,9 +90,10 @@ class Snake {
 
   int moves_since_last_apple() const { return moves_since_last_apple_; }
 
+  int moves_since_last_apple_ = 0;
+
  private:
   std::vector<Point> points_;
-  int moves_since_last_apple_ = 0;
 };
 
 template <int ARENA_SIZE>
@@ -220,9 +222,13 @@ class SnakeBoard {
     return game_state_;
   }
 
-  void print() const {
+  void print(bool clear_screen = true) const {
     // 🟣🟤🟢🟡🟠⚪⚫🔴🔵
-    std::cout << "\x1B[2J\x1B[H";
+    if (clear_screen) {
+      std::cout << "\x1B[2J\x1B[H";
+    } else {
+      std::cout << "\n----------------------\n";
+    }
     // std::cout << "\n";
     for (int y = 0; y < ARENA_SIZE; ++y) {
       for (int x = 0; x < ARENA_SIZE; ++x) {
@@ -261,10 +267,61 @@ class SnakeBoard {
       default:
         break;
     }
-    // using namespace std::chrono;
-    // milliseconds ms =
-    //     duration_cast<milliseconds>(system_clock::now().time_since_epoch());
-    // std::cout << ms.count() << std::endl;
+  }
+
+  std::string html_table() const {
+    std::vector<std::string> lines;
+    // lines.push_back("<table>");
+    for (int y = 0; y < ARENA_SIZE; ++y) {
+      lines.push_back("<tr>");
+      for (int x = 0; x < ARENA_SIZE; ++x) {
+        lines.push_back("<td fixedsize=\"true\" width=\"24\" height=\"24\"");
+
+        switch (pixels_[x + ARENA_SIZE * y]) {
+          case EMPTY:
+            lines.push_back(" ");
+            break;
+          case P1:
+            lines.push_back(" bgcolor=\"blue\"");
+            break;
+          case P2:
+            lines.push_back(" bgcolor=\"green\"");
+            break;
+          case APPLE:
+            lines.push_back(" bgcolor=\"red\"");
+            break;
+        }
+        if ((p1_.head().x == x && p1_.head().y == y) ||
+            (p2_.head().x == x && p2_.head().y == y)) {
+          lines.push_back(">H</td>");
+        } else {
+          lines.push_back("></td>");
+        }
+      }
+      lines.push_back("</tr>");
+    }
+
+    lines.push_back(absl::StrCat("<tr><td colspan=\"", ARENA_SIZE, "\">"));
+    switch (game_state_) {
+      case GameState::P1_WIN:
+        lines.push_back("blue wins");
+        break;
+      case GameState::P2_WIN:
+        lines.push_back("green wins");
+        break;
+      case GameState::DRAW:
+        lines.push_back("draw");
+        break;
+      default:
+        lines.push_back("running");
+        break;
+    }
+    lines.push_back(absl::StrCat(" P1(", 100 - p1_.moves_since_last_apple(),
+                                 ") P2(", 100 - p2_.moves_since_last_apple(),
+                                 ")"));
+    lines.push_back("</td></tr>");
+
+    return absl::StrJoin(lines, "");
   }
 
   Point random_free_position() const {
@@ -297,6 +354,8 @@ class SnakeBoard {
   bool is_terminal() const { return game_state_ != GameState::RUNNING; }
 
   GameState game_state() const { return game_state_; }
+
+  constexpr int size() const { return ARENA_SIZE; }
 
  private:
   GameState game_state_ = GameState::RUNNING;
@@ -385,11 +444,12 @@ class SnakeMctsAdapter {
     return result;
   }
 
-  bool valid_action(Direction d) const {
-    if (move_queued_) {
-      return state_.p2_view().valid_move(d);
-    }
-    return state_.p1_view().valid_move(d);
+  bool valid_action(Direction) const {
+    return true;
+    // if (move_queued_) {
+    //   return state_.p2_view().valid_move(d);
+    // }
+    // return state_.p1_view().valid_move(d);
   }
 
   bool is_terminal() const {
@@ -398,14 +458,32 @@ class SnakeMctsAdapter {
 
   int player() const { return move_queued_ ? 1 : -1; }
 
-  void print() const {
-    state_.print();
+  void print(bool clear_screen = true) const {
+    state_.print(clear_screen);
     if (move_queued_) {
       std::cout << "p1 queue move: " << Direction_Name(p1_queued_move_)
                 << std::endl;
     } else {
       std::cout << "no move queued for p1" << std::endl;
     }
+  }
+  std::string html(std::string info) const {
+    std::vector<std::string> lines;
+    lines.push_back("<table border=\"1\">");
+    lines.push_back(state_.html_table());
+    lines.push_back("<tr><td colspan=\"16\">");
+    if (move_queued_) {
+      lines.push_back(
+          absl::StrCat("p1 queue move: ", Direction_Name(p1_queued_move_)));
+    } else {
+      lines.push_back("p1 no move queued");
+    }
+
+    lines.push_back(
+        absl::StrCat("</td></tr><tr><td colspan=\"", state_.size(), "\">"));
+    lines.push_back(info);
+    lines.push_back("</td></tr></table>");
+    return absl::StrJoin(lines, "");
   }
 
   const SnakeBoard16& board() const { return state_; }

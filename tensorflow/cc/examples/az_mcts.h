@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
+#include <fstream>
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -14,7 +15,7 @@
 #include <vector>
 
 #include "tensorflow/cc/examples/mcts_node.h"
-#include "tensorflow/cc/examples/network.h"
+#include "tensorflow/cc/examples/network_fiber_batch.h"
 #include "tensorflow/cc/examples/snake.h"
 #include "tensorflow/cc/saved_model/loader.h"
 #include "tensorflow/cc/saved_model/tag_constants.h"
@@ -40,19 +41,29 @@ double random_rollout(const SnakeMctsAdapter& state) {
 
 class Mcts {
  public:
-  static Direction Strategy(const SnakeBoard16::PlayerView& p) {
+  explicit Mcts(NetworkFiberBatch::BatchFiber prediction_fiber)
+      : prediction_fiber_(std::move(prediction_fiber)) {}
+
+  /*static Direction Strategy(const SnakeBoard16::PlayerView& p) {
     Mcts mcts;
     return mcts.Search(SnakeMctsAdapter(SnakeBoard16(p)));
-  }
-  Direction Search(SnakeMctsAdapter state) {
+  }*/
+  Direction Search(SnakeMctsAdapter state, int num_rounds,
+                   std::string debug_file = "") {
     root_ = std::make_unique<Node>(state);
 
-    for (int i = 0; i < 1000; ++i) {
+    // std::gamma_distribution<double> distribution(2.0);
+
+    for (int i = 0; i < num_rounds; ++i) {
       execute_round();
     }
 
     auto* best_child = get_best_child(root_.get(), 0.0);
     CHECK(best_child != nullptr);
+    if (!debug_file.empty()) {
+      std::ofstream ofs(debug_file);
+      ofs << root_->graphviz_dot() << std::endl;
+    }
     return best_child->action_;
   }
 
@@ -86,8 +97,13 @@ class Mcts {
   */
   void execute_round() {
     Node* node = select_node(root_.get());
-    double reward = rollout_(node->state_);
-    backpropogate(node, reward);
+    Network::Prediction prediction =
+        prediction_fiber_.BatchProcess(&node->state_);
+    if (node->is_terminal_) {
+      backpropogate(node, node->state_.value());
+      return;
+    }
+    backpropogate(node, prediction.value);
   }
 
   Node* select_node(Node* node) {
@@ -117,6 +133,7 @@ class Mcts {
 
  private:
   float exploration_constant_ = 2.0;
+  NetworkFiberBatch::BatchFiber prediction_fiber_;
   std::unique_ptr<Node> root_;
 };
 

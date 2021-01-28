@@ -57,6 +57,40 @@ class Node {
     return nullptr;
   }
 
+  std::string graphviz_dot() const {
+    struct GraphBuilder {
+      std::vector<std::string> lines;
+      void operator()(const Node* node, std::string name) {
+        if (node == nullptr) {
+          return;
+        }
+        auto info = absl::StrCat("reward=", node->total_reward_, " ",
+                                 "num_visits=", node->num_visits_);
+
+        lines.push_back(absl::StrCat("  ", name,
+                                     "[shape=none margin=0 label=< ",
+                                     node->state_.html(info), " >];"));
+        for (int i = Direction_MIN; i < Direction_ARRAYSIZE; ++i) {
+          const Node* child = node->children_[i];
+          if (child == nullptr) {
+            continue;
+          }
+          auto child_name = name + Direction_Name(static_cast<Direction>(i));
+          lines.push_back(absl::StrCat(
+              "  ", name, "->", child_name, " [label=\"",
+              Direction_Name(static_cast<Direction>(i)), " ucb=", child->ucb(0.0), "\"];"));
+          this->operator()(child, child_name);
+        }
+      }
+    };
+
+    GraphBuilder builder;
+    builder.lines.push_back("digraph G {");
+    builder(this, "root");
+    builder.lines.push_back("}");
+    return absl::StrJoin(builder.lines, "\n");
+  }
+
   const SnakeMctsAdapter state_;
   Node* const parent_;
   const Direction action_;
